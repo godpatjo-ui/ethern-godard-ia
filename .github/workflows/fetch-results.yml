@@ -4,6 +4,8 @@ on:
   schedule:
     - cron: "35 21 * * *"   # 21:35 UTC (ajuste selon ton besoin)
   workflow_dispatch: {}
+permissions:
+  contents: write
 
 jobs:
   fetch:
