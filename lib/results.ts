@@ -4,7 +4,7 @@ const KEY = "@results_cache_v1";
 
 // ⚠️ Remplace par l'URL publique de TON results.json (GitHub Pages ou RAW GitHub)
 const RESULTS_URL = "undefined";
-// ou: "https://raw.githubusercontent.com/<user>/<repo>/main/public/results.json"
+// ou: "undefined"
 
 export type LotoRow = { date:string; n1:number;n2:number;n3:number;n4:number;n5:number; chance:number };
 export type EMRow   = { date:string; n1:number;n2:number;n3:number;n4:number;n5:number; e1:number;e2:number };
