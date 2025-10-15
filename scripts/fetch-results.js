@@ -1,102 +1,119 @@
 import fs from "fs";
 import fetch from "node-fetch";
 
-/**
- * Produit public/results.json :
- * {
- *   "loto":[ {date,n1..n5,chance}, ... ],
- *   "euromillions":[ {date,n1..n5,e1,e2}, ... ],
- *   "eurodreams":[ {date,n1..n6,dream}, ... ],
- *   "updatedAt":"..."
- * }
- *
- * Les URL sources sont passées par variables d'env :
- *  - LOTO_URL : JSON d'un (ou plusieurs) derniers tirages Loto
- *  - EM_URL   : JSON d'un (ou plusieurs) derniers tirages EuroMillions
- *  - ED_URL   : JSON d'un (ou plusieurs) derniers tirages EuroDreams
- *
- * Format attendu de chaque objet source :
- *  Loto        { date:"YYYY-MM-DD", main:[5], chance:number }
- *  EuroMillions{ date:"YYYY-MM-DD", main:[5], stars:[2] }
- *  EuroDreams  { date:"YYYY-MM-DD", main:[6], dream:number }
- */
-
 const LOTO_URL = process.env.LOTO_URL || "";
 const EM_URL   = process.env.EM_URL   || "";
 const ED_URL   = process.env.ED_URL   || "";
 
-async function safeGetJson(url) {
-  if (!url) return null;
+function asArray(x) {
+  if (!x) return [];
+  return Array.isArray(x) ? x : [x];
+}
+
+async function safeGet(url) {
+  if (!url) return [];
   try {
-    const r = await fetch(url, { headers: { "accept":"application/json" } });
+    const r = await fetch(url, { headers: { accept: "application/json" } });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    return await r.json();
+    const j = await r.json();
+    return asArray(j);
   } catch (e) {
-    console.error("[fetch]", url, "=>", e.message);
-    return null;
+    console.error("⚠️  Fetch failed:", url, String(e));
+    return [];
   }
 }
 
-const toArray = (x) => Array.isArray(x) ? x : (x ? [x] : []);
-const validInt = (x) => Number.isInteger(x);
-
-function mapLoto(entry) {
+function normalize() {
   return {
-    date: entry?.date,
-    n1: entry?.main?.[0], n2: entry?.main?.[1], n3: entry?.main?.[2], n4: entry?.main?.[3], n5: entry?.main?.[4],
-    chance: entry?.chance
-  };
-}
-function mapEM(entry) {
-  return {
-    date: entry?.date,
-    n1: entry?.main?.[0], n2: entry?.main?.[1], n3: entry?.main?.[2], n4: entry?.main?.[3], n5: entry?.main?.[4],
-    e1: entry?.stars?.[0], e2: entry?.stars?.[1],
-  };
-}
-function mapED(entry) {
-  return {
-    date: entry?.date,
-    n1: entry?.main?.[0], n2: entry?.main?.[1], n3: entry?.main?.[2], n4: entry?.main?.[3], n5: entry?.main?.[4], n6: entry?.main?.[5],
-    dream: entry?.dream
+    loto: [],
+    euromillions: [],
+    eurodreams: [],
+    updatedAt: new Date().toISOString(),
   };
 }
 
-const allInts = (arr) => arr.every(validInt);
+function mergeUnique(list, keyFn) {
+  const map = new Map();
+  for (const item of list) {
+    const k = keyFn(item);
+    if (!map.has(k)) map.set(k, item);
+  }
+  return Array.from(map.values()).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
 
-function mergeByDate(oldArr=[], newArr=[]) {
-  const byDate = (a) => Object.fromEntries(a.map(x => [x.date, x]));
-  const out = { ...byDate(oldArr), ...byDate(newArr) };
-  return Object.values(out).filter(x=>x?.date).sort((a,b)=> a.date < b.date ? -1 : 1);
+function mapLoto(arr) {
+  return arr
+    .map((o) => ({
+      date: String(o.date || o.Date || "").slice(0, 10),
+      n1: Number((o.main?.[0] ?? o.n1)),
+      n2: Number((o.main?.[1] ?? o.n2)),
+      n3: Number((o.main?.[2] ?? o.n3)),
+      n4: Number((o.main?.[3] ?? o.n4)),
+      n5: Number((o.main?.[4] ?? o.n5)),
+      chance: Number(o.chance ?? o.bonus ?? o.complementaire ?? o.lucky ?? o.chanceNumber),
+    }))
+    .filter((x) => x.date && [x.n1,x.n2,x.n3,x.n4,x.n5].every(Number.isFinite) && Number.isFinite(x.chance));
+}
+
+function mapEM(arr) {
+  return arr
+    .map((o) => ({
+      date: String(o.date || o.Date || "").slice(0, 10),
+      n1: Number((o.main?.[0] ?? o.n1)),
+      n2: Number((o.main?.[1] ?? o.n2)),
+      n3: Number((o.main?.[2] ?? o.n3)),
+      n4: Number((o.main?.[3] ?? o.n4)),
+      n5: Number((o.main?.[4] ?? o.n5)),
+      e1: Number((o.stars?.[0] ?? o.e1 ?? o.star1)),
+      e2: Number((o.stars?.[1] ?? o.e2 ?? o.star2)),
+    }))
+    .filter((x) => x.date && [x.n1,x.n2,x.n3,x.n4,x.n5,x.e1,x.e2].every(Number.isFinite));
+}
+
+function mapED(arr) {
+  return arr
+    .map((o) => ({
+      date: String(o.date || o.Date || "").slice(0, 10),
+      n1: Number((o.main?.[0] ?? o.n1)),
+      n2: Number((o.main?.[1] ?? o.n2)),
+      n3: Number((o.main?.[2] ?? o.n3)),
+      n4: Number((o.main?.[3] ?? o.n4)),
+      n5: Number((o.main?.[4] ?? o.n5)),
+      n6: Number((o.main?.[5] ?? o.n6)),
+      dream: Number(o.dream ?? o.special ?? o.joker ?? o.dreamNumber),
+    }))
+    .filter((x) => x.date && [x.n1,x.n2,x.n3,x.n4,x.n5,x.n6,x.dream].every(Number.isFinite));
 }
 
 async function main() {
-  const lotoRaw = await safeGetJson(LOTO_URL);
-  const emRaw   = await safeGetJson(EM_URL);
-  const edRaw   = await safeGetJson(ED_URL);
+  // Charge l’existant si présent
+  let out = normalize();
+  try {
+    if (fs.existsSync("public/results.json")) {
+      const cur = JSON.parse(fs.readFileSync("public/results.json","utf8"));
+      out = { ...normalize(), ...cur };
+    }
+  } catch {}
 
-  const loto = toArray(lotoRaw).map(mapLoto)
-    .filter(e => e.date && allInts([e.n1,e.n2,e.n3,e.n4,e.n5,e.chance]));
-  const euromillions = toArray(emRaw).map(mapEM)
-    .filter(e => e.date && allInts([e.n1,e.n2,e.n3,e.n4,e.n5,e.e1,e.e2]));
-  const eurodreams = toArray(edRaw).map(mapED)
-    .filter(e => e.date && allInts([e.n1,e.n2,e.n3,e.n4,e.n5,e.n6,e.dream]));
+  // Récupère les 3 sources
+  const [lotoRaw, emRaw, edRaw] = await Promise.all([
+    safeGet(LOTO_URL),
+    safeGet(EM_URL),
+    safeGet(ED_URL),
+  ]);
 
-  let prev = { loto: [], euromillions: [], eurodreams: [] };
-  try { prev = JSON.parse(fs.readFileSync("public/results.json","utf8")); } catch {}
+  // Map + merge (clé = date)
+  const lotoNew = mapLoto(lotoRaw);
+  const emNew   = mapEM(emRaw);
+  const edNew   = mapED(edRaw);
 
-  const out = {
-    loto: mergeByDate(prev.loto, loto),
-    euromillions: mergeByDate(prev.euromillions, euromillions),
-    eurodreams: mergeByDate(prev.eurodreams, eurodreams),
-    updatedAt: new Date().toISOString(),
-  };
+  out.loto = mergeUnique([...(out.loto||[]), ...lotoNew], (x) => `loto:${x.date}`);
+  out.euromillions = mergeUnique([...(out.euromillions||[]), ...emNew], (x) => `em:${x.date}`);
+  out.eurodreams = mergeUnique([...(out.eurodreams||[]), ...edNew], (x) => `ed:${x.date}`);
+  out.updatedAt = new Date().toISOString();
 
+  if (!fs.existsSync("public")) fs.mkdirSync("public");
   fs.writeFileSync("public/results.json", JSON.stringify(out, null, 2));
-  console.log("✅ results.json mis à jour —",
-    "Loto:", out.loto.length,
-    "EM:", out.euromillions.length,
-    "ED:", out.eurodreams.length
-  );
+  console.log("✅ results.json écrit :", "loto", out.loto.length, "| em", out.euromillions.length, "| ed", out.eurodreams.length);
 }
-main().catch(e => { console.error(e); process.exit(1); });
+main().catch((e) => { console.error(e); process.exit(1); });
