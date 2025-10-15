@@ -1,0 +1,40 @@
+name: Fetch lottery results
+
+on:
+  schedule:
+    - cron: "35 21 * * *"   # 21:35 UTC (ajuste selon ton besoin)
+  workflow_dispatch: {}
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install deps
+        run: npm ci || npm i
+
+      - name: Fetch results
+        env:
+          LOTO_URL: ${{ secrets.LOTO_URL }}
+          EM_URL:   ${{ secrets.EM_URL }}
+          ED_URL:   ${{ secrets.ED_URL }}
+        run: npm run fetch
+
+      - name: Commit & push results.json
+        run: |
+          if git status --porcelain | grep -q "public/results.json"; then
+            git config user.name "results-bot"
+            git config user.email "results-bot@users.noreply.github.com"
+            git add public/results.json
+            git commit -m "chore(results): update results.json [skip ci]"
+            git push
+          else
+            echo "No changes in results.json"
+          fi
