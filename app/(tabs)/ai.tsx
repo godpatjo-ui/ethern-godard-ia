@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import { usePreferredTheme } from "../../lib/theme";
-import { generateLocalGrids } from "../../core/engine";
+import { generateLocalGrids } from "../../lib/games"; // <- correct
 import type { Grid } from "../../core/types";
 
 export default function AIScreen() {
@@ -18,7 +18,7 @@ export default function AIScreen() {
 
   function onGenerate() {
     try {
-      const kind: any = "loto"; // tu pourras rebrancher la logique "gameOfTheDay" ici
+      const kind: any = "loto"; // tu pourras remettre gameOfTheDay plus tard
       const produced = generateLocalGrids(kind, 5) as Grid[];
       setGrids(produced);
       setSource(`Source: Local (${kind})`);
